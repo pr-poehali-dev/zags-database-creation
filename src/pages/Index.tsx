@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import LoginScreen from '@/components/LoginScreen';
+import MarriageCertificate, { type CertData } from '@/components/MarriageCertificate';
+import {
+  api,
+  getToken,
+  clearToken,
+  type Employee,
+  type CertRecord,
+} from '@/lib/api';
 
 type TabKey = 'certificates' | 'registration' | 'staff' | 'settings';
 
@@ -14,44 +24,56 @@ const NAV: { key: TabKey; label: string; icon: string }[] = [
   { key: 'settings', label: 'Настройки', icon: 'Settings' },
 ];
 
-interface CertData {
-  series: string;
-  number: string;
-  husband: string;
-  husbandBirth: string;
-  wife: string;
-  wifeBirth: string;
-  surnameAfter: string;
-  marriageDate: string;
-  actNumber: string;
-  place: string;
-  registrar: string;
-}
-
-const EMPTY: CertData = {
+const DEFAULT_CERT: CertData = {
   series: 'I-МБ',
-  number: '№ 482917',
+  number: '482917',
   husband: 'Соколов Дмитрий Андреевич',
   husbandBirth: '14.03.1992',
+  husbandSurnameAfter: 'Соколов',
   wife: 'Орлова Екатерина Сергеевна',
   wifeBirth: '27.08.1994',
-  surnameAfter: 'Соколова',
+  wifeSurnameAfter: 'Соколова',
   marriageDate: '16.06.2026',
   actNumber: '156',
+  issueDate: '16.06.2026',
   place: 'Дворец бракосочетания №1, г. Москва',
   registrar: 'Воронцова М. И.',
 };
 
 export default function Index() {
+  const [me, setMe] = useState<Employee | null>(null);
+  const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<TabKey>('certificates');
-  const [data, setData] = useState<CertData>(EMPTY);
 
-  const upd = (k: keyof CertData, v: string) =>
-    setData((d) => ({ ...d, [k]: v }));
+  useEffect(() => {
+    if (!getToken()) {
+      setChecking(false);
+      return;
+    }
+    api
+      .me()
+      .then((r) => setMe(r.employee))
+      .catch(() => clearToken())
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center gov-pattern">
+        <Icon name="Loader" className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (!me) return <LoginScreen onLogin={setMe} />;
+
+  const logout = () => {
+    clearToken();
+    setMe(null);
+  };
 
   return (
     <div className="min-h-screen flex text-foreground gov-pattern">
-      {/* Sidebar */}
       <aside className="no-print w-72 shrink-0 border-r border-border bg-card/60 backdrop-blur-sm flex flex-col">
         <div className="px-6 py-7 border-b border-border">
           <div className="flex items-center gap-3">
@@ -59,9 +81,7 @@ export default function Index() {
               <Icon name="Landmark" className="text-primary" size={22} />
             </div>
             <div>
-              <div className="font-serif text-2xl leading-none text-primary tracking-wide">
-                ЗАГС
-              </div>
+              <div className="font-serif text-2xl leading-none text-primary tracking-wide">ЗАГС</div>
               <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mt-1">
                 Единый реестр
               </div>
@@ -86,16 +106,17 @@ export default function Index() {
           ))}
         </nav>
 
-        <div className="px-6 py-5 border-t border-border text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Система активна
-          </div>
-          <div className="mt-2">Версия 1.0 · Защищённый доступ</div>
+        <div className="px-4 py-4 border-t border-border">
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Icon name="LogOut" size={18} />
+            Выйти
+          </button>
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 min-w-0">
         <header className="no-print sticky top-0 z-10 px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md flex items-center justify-between">
           <div>
@@ -108,21 +129,21 @@ export default function Index() {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-sm font-medium">Воронцова М. И.</div>
-              <div className="text-xs text-muted-foreground">Регистратор</div>
+              <div className="text-sm font-medium">{me.full_name}</div>
+              <div className="text-xs text-muted-foreground">
+                {me.is_admin ? 'Администратор' : me.role}
+              </div>
             </div>
             <div className="h-10 w-10 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-serif text-primary">
-              В
+              {me.full_name[0]}
             </div>
           </div>
         </header>
 
         <div className="p-8">
-          {tab === 'certificates' && (
-            <Certificates data={data} upd={upd} />
-          )}
+          {tab === 'certificates' && <Certificates registrar={me.full_name} />}
           {tab === 'registration' && <Registration />}
-          {tab === 'staff' && <Staff />}
+          {tab === 'staff' && <Staff me={me} />}
           {tab === 'settings' && <Settings />}
         </div>
       </main>
@@ -150,9 +171,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground">{label}</Label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -162,17 +181,41 @@ function Field({
   );
 }
 
-function Certificates({
-  data,
-  upd,
-}: {
-  data: CertData;
-  upd: (k: keyof CertData, v: string) => void;
-}) {
+function Certificates({ registrar }: { registrar: string }) {
+  const { toast } = useToast();
+  const [data, setData] = useState<CertData>({ ...DEFAULT_CERT, registrar });
+  const [saving, setSaving] = useState(false);
+  const upd = (k: keyof CertData, v: string) => setData((d) => ({ ...d, [k]: v }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveCertificate({
+        series: data.series,
+        number: data.number,
+        husband: data.husband,
+        husband_birth: data.husbandBirth,
+        husband_surname_after: data.husbandSurnameAfter,
+        wife: data.wife,
+        wife_birth: data.wifeBirth,
+        wife_surname_after: data.wifeSurnameAfter,
+        marriage_date: data.marriageDate,
+        act_number: data.actNumber,
+        issue_date: data.issueDate,
+        place: data.place,
+        registrar: data.registrar,
+      });
+      toast({ title: 'Сохранено', description: 'Свидетельство добавлено в реестр' });
+    } catch (e) {
+      toast({ title: 'Ошибка', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="grid lg:grid-cols-2 gap-8 animate-fade-in">
-      {/* Form */}
-      <Card className="no-print bg-card/70 border-border p-6">
+    <div className="grid xl:grid-cols-2 gap-8 animate-fade-in">
+      <Card className="no-print bg-card/70 border-border p-6 h-fit">
         <SectionTitle icon="ScrollText">Свидетельство о заключении брака</SectionTitle>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Серия" value={data.series} onChange={(v) => upd('series', v)} />
@@ -181,174 +224,196 @@ function Certificates({
             <Field label="Супруг (Ф.И.О.)" value={data.husband} onChange={(v) => upd('husband', v)} />
           </div>
           <Field label="Дата рожд. супруга" value={data.husbandBirth} onChange={(v) => upd('husbandBirth', v)} />
-          <Field label="Фамилия после брака" value={data.surnameAfter} onChange={(v) => upd('surnameAfter', v)} />
+          <Field label="Фамилия мужа после брака" value={data.husbandSurnameAfter} onChange={(v) => upd('husbandSurnameAfter', v)} />
           <div className="col-span-2">
             <Field label="Супруга (Ф.И.О.)" value={data.wife} onChange={(v) => upd('wife', v)} />
           </div>
           <Field label="Дата рожд. супруги" value={data.wifeBirth} onChange={(v) => upd('wifeBirth', v)} />
+          <Field label="Фамилия жены после брака" value={data.wifeSurnameAfter} onChange={(v) => upd('wifeSurnameAfter', v)} />
           <Field label="Дата заключения брака" value={data.marriageDate} onChange={(v) => upd('marriageDate', v)} />
           <Field label="Номер актовой записи" value={data.actNumber} onChange={(v) => upd('actNumber', v)} />
+          <Field label="Дата выдачи" value={data.issueDate} onChange={(v) => upd('issueDate', v)} />
           <Field label="Регистратор" value={data.registrar} onChange={(v) => upd('registrar', v)} />
           <div className="col-span-2">
             <Field label="Место регистрации" value={data.place} onChange={(v) => upd('place', v)} />
           </div>
         </div>
-        <Button
-          onClick={() => window.print()}
-          className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90 h-11"
-        >
-          <Icon name="Printer" size={18} className="mr-2" />
-          Печать свидетельства
-        </Button>
+        <div className="flex gap-3 mt-6">
+          <Button onClick={save} disabled={saving} variant="outline" className="flex-1 h-11 border-primary/40">
+            <Icon name="Save" size={18} className="mr-2" />
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </Button>
+          <Button onClick={() => window.print()} className="flex-1 h-11 bg-primary text-primary-foreground hover:bg-primary/90">
+            <Icon name="Printer" size={18} className="mr-2" />
+            Печать
+          </Button>
+        </div>
       </Card>
 
-      {/* Preview / print */}
       <div>
-        <SectionTitle icon="Eye">Предпросмотр документа</SectionTitle>
-        <CertificatePreview data={data} />
-      </div>
-    </div>
-  );
-}
-
-function CertificatePreview({ data }: { data: CertData }) {
-  return (
-    <div className="print-area cert-paper rounded-md shadow-2xl p-10 text-[#2a2419] relative overflow-hidden animate-scale-in">
-      <div
-        className="absolute inset-3 border-2 rounded pointer-events-none"
-        style={{ borderColor: '#b8975188' }}
-      />
-      <div
-        className="absolute inset-[18px] border rounded pointer-events-none"
-        style={{ borderColor: '#b8975144' }}
-      />
-
-      <div className="relative text-center">
-        <div className="flex justify-center mb-3">
-          <div className="h-14 w-14 rounded-full border-2 flex items-center justify-center" style={{ borderColor: '#9a7b3e' }}>
-            <Icon name="Landmark" size={26} style={{ color: '#9a7b3e' }} />
-          </div>
+        <div className="no-print">
+          <SectionTitle icon="Eye">Предпросмотр официального бланка</SectionTitle>
         </div>
-        <div className="text-[11px] uppercase tracking-[0.25em]" style={{ color: '#7a6840' }}>
-          Российская Федерация
-        </div>
-        <h3 className="font-serif text-3xl mt-3 mb-1" style={{ color: '#5a4a22' }}>
-          Свидетельство
-        </h3>
-        <div className="font-serif text-lg" style={{ color: '#7a6840' }}>
-          о заключении брака
-        </div>
-
-        <div className="my-5 text-sm font-medium" style={{ color: '#5a4a22' }}>
-          {data.series} {data.number}
-        </div>
-
-        <div className="text-left text-sm space-y-3 mt-6 px-2" style={{ color: '#2a2419' }}>
-          <p className="leading-relaxed">
-            Гражданин{' '}
-            <b className="font-semibold">{data.husband}</b>, {data.husbandBirth} г.р.
-          </p>
-          <p className="leading-relaxed">
-            и гражданка{' '}
-            <b className="font-semibold">{data.wife}</b>, {data.wifeBirth} г.р.
-          </p>
-          <p className="leading-relaxed">
-            заключили брак{' '}
-            <b className="font-semibold">{data.marriageDate}</b>, о чём составлена
-            запись акта о заключении брака № {data.actNumber}.
-          </p>
-          <p className="leading-relaxed">
-            После заключения брака присвоены фамилии:<br />
-            мужу — Соколов, жене — <b className="font-semibold">{data.surnameAfter}</b>.
-          </p>
-        </div>
-
-        <div className="mt-7 pt-4 flex items-end justify-between text-xs" style={{ borderTop: '1px solid #b8975155', color: '#5a4a22' }}>
-          <div className="text-left">
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: '#7a6840' }}>Место регистрации</div>
-            <div className="mt-1 max-w-[160px]">{data.place}</div>
-          </div>
-          <div className="text-right">
-            <div className="font-serif italic text-base" style={{ color: '#5a4a22' }}>{data.registrar}</div>
-            <div className="text-[10px] uppercase tracking-wider mt-1" style={{ color: '#7a6840' }}>
-              Руководитель органа ЗАГС
-            </div>
-          </div>
-        </div>
+        <MarriageCertificate data={data} />
       </div>
     </div>
   );
 }
 
 function Registration() {
-  const rows = [
-    { id: '156', type: 'Брак', name: 'Соколов Д. А. / Орлова Е. С.', date: '16.06.2026', status: 'Зарегистрировано' },
-    { id: '157', type: 'Рождение', name: 'Соколова Анна Дмитриевна', date: '15.06.2026', status: 'Зарегистрировано' },
-    { id: '158', type: 'Брак', name: 'Лебедев И. П. / Зайцева М. К.', date: '14.06.2026', status: 'На проверке' },
-    { id: '159', type: 'Расторжение', name: 'Громов А. С. / Громова Н. В.', date: '12.06.2026', status: 'Зарегистрировано' },
-  ];
+  const [items, setItems] = useState<CertRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .listCertificates()
+      .then((r) => setItems(r.certificates))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <Card className="bg-card/70 border-border p-6 animate-fade-in">
       <SectionTitle icon="ClipboardList">Журнал актовых записей</SectionTitle>
-      <div className="overflow-hidden rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-secondary/60 text-muted-foreground text-xs uppercase tracking-wider">
-              <th className="text-left px-4 py-3 font-medium">№ акта</th>
-              <th className="text-left px-4 py-3 font-medium">Тип</th>
-              <th className="text-left px-4 py-3 font-medium">Участники</th>
-              <th className="text-left px-4 py-3 font-medium">Дата</th>
-              <th className="text-left px-4 py-3 font-medium">Статус</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-border hover:bg-secondary/40 transition-colors">
-                <td className="px-4 py-3 font-medium text-primary">{r.id}</td>
-                <td className="px-4 py-3">{r.type}</td>
-                <td className="px-4 py-3">{r.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{r.date}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full border ${
-                      r.status === 'Зарегистрировано'
-                        ? 'border-emerald-600/40 text-emerald-400 bg-emerald-600/10'
-                        : 'border-primary/40 text-primary bg-primary/10'
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </td>
+      {loading ? (
+        <div className="py-10 text-center text-muted-foreground">
+          <Icon name="Loader" className="animate-spin mx-auto" size={24} />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-12 text-center text-muted-foreground">
+          <Icon name="FileX" size={40} className="mx-auto mb-3 opacity-50" />
+          Записей пока нет. Создайте свидетельство во вкладке «Свидетельства».
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-secondary/60 text-muted-foreground text-xs uppercase tracking-wider">
+                <th className="text-left px-4 py-3 font-medium">№ акта</th>
+                <th className="text-left px-4 py-3 font-medium">Серия/Номер</th>
+                <th className="text-left px-4 py-3 font-medium">Супруги</th>
+                <th className="text-left px-4 py-3 font-medium">Дата брака</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.id} className="border-t border-border hover:bg-secondary/40 transition-colors">
+                  <td className="px-4 py-3 font-medium text-primary">{r.act_number}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.series} № {r.number}</td>
+                  <td className="px-4 py-3">{r.husband} / {r.wife}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.marriage_date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }
 
-function Staff() {
-  const people = [
-    { name: 'Воронцова Мария Игоревна', role: 'Руководитель отдела', acts: 1240 },
-    { name: 'Дроздов Павел Сергеевич', role: 'Регистратор', acts: 856 },
-    { name: 'Никитина Ольга Львовна', role: 'Регистратор', acts: 612 },
-  ];
+function Staff({ me }: { me: Employee }) {
+  const { toast } = useToast();
+  const [items, setItems] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ full_name: '', role: 'Регистратор', login: '', password: '', is_admin: false });
+  const [adding, setAdding] = useState(false);
+
+  const load = () => {
+    api
+      .listEmployees()
+      .then((r) => setItems(r.employees))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const add = async () => {
+    if (!form.full_name || !form.login || !form.password) {
+      toast({ title: 'Заполните поля', description: 'Ф.И.О., логин и пароль обязательны', variant: 'destructive' });
+      return;
+    }
+    setAdding(true);
+    try {
+      await api.addEmployee(form);
+      setForm({ full_name: '', role: 'Регистратор', login: '', password: '', is_admin: false });
+      toast({ title: 'Сотрудник добавлен' });
+      load();
+    } catch (e) {
+      toast({ title: 'Ошибка', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    try {
+      await api.deleteEmployee(id);
+      setItems((s) => s.filter((x) => x.id !== id));
+      toast({ title: 'Сотрудник удалён' });
+    } catch (e) {
+      toast({ title: 'Ошибка', description: (e as Error).message, variant: 'destructive' });
+    }
+  };
+
   return (
-    <div className="grid md:grid-cols-3 gap-5 animate-fade-in">
-      {people.map((p) => (
-        <Card key={p.name} className="bg-card/70 border-border p-6 hover:border-primary/40 transition-colors">
-          <div className="h-12 w-12 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-serif text-xl text-primary mb-4">
-            {p.name[0]}
+    <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
+      <div className="lg:col-span-2 space-y-4">
+        {loading ? (
+          <div className="py-10 text-center text-muted-foreground">
+            <Icon name="Loader" className="animate-spin mx-auto" size={24} />
           </div>
-          <div className="font-medium">{p.name}</div>
-          <div className="text-sm text-muted-foreground mt-0.5">{p.role}</div>
-          <div className="mt-4 pt-4 border-t border-border flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Оформлено актов</span>
-            <span className="font-semibold text-primary">{p.acts}</span>
+        ) : (
+          items.map((p) => (
+            <Card key={p.id} className="bg-card/70 border-border p-5 flex items-center gap-4 hover:border-primary/40 transition-colors">
+              <div className="h-12 w-12 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center font-serif text-xl text-primary shrink-0">
+                {p.full_name[0]}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium truncate">{p.full_name}</div>
+                <div className="text-sm text-muted-foreground">
+                  {p.is_admin ? 'Администратор' : p.role} · логин: {p.login}
+                </div>
+              </div>
+              {me.is_admin && p.id !== me.id && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => remove(p.id)}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                >
+                  <Icon name="Trash2" size={18} />
+                </Button>
+              )}
+            </Card>
+          ))
+        )}
+      </div>
+
+      {me.is_admin && (
+        <Card className="bg-card/70 border-border p-6 h-fit">
+          <SectionTitle icon="UserPlus">Новый сотрудник</SectionTitle>
+          <div className="space-y-3">
+            <Field label="Ф.И.О." value={form.full_name} onChange={(v) => setForm((f) => ({ ...f, full_name: v }))} />
+            <Field label="Должность" value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v }))} />
+            <Field label="Логин" value={form.login} onChange={(v) => setForm((f) => ({ ...f, login: v }))} />
+            <Field label="Пароль" value={form.password} onChange={(v) => setForm((f) => ({ ...f, password: v }))} />
+            <label className="flex items-center gap-2 text-sm cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={form.is_admin}
+                onChange={(e) => setForm((f) => ({ ...f, is_admin: e.target.checked }))}
+                className="accent-[hsl(var(--primary))] h-4 w-4"
+              />
+              Права администратора
+            </label>
+            <Button onClick={add} disabled={adding} className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 mt-2">
+              <Icon name="Plus" size={18} className="mr-2" />
+              {adding ? 'Добавление...' : 'Добавить сотрудника'}
+            </Button>
           </div>
         </Card>
-      ))}
+      )}
     </div>
   );
 }
