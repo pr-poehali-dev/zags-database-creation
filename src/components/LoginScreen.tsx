@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { api, setToken, type Employee } from '@/lib/api';
 
 export default function LoginScreen({ onLogin }: { onLogin: (e: Employee) => void }) {
-  const [login, setLogin] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -76,9 +76,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (e: Employee) => voi
             </Button>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-5">
-          Тестовый доступ: admin / admin123
-        </p>
+
       </div>
     </div>
   );

@@ -10,9 +10,44 @@ CORS = {
     'Access-Control-Max-Age': '86400',
 }
 
+SETUP_SQL = """
+CREATE TABLE IF NOT EXISTS employees (
+    id SERIAL PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'staff',
+    login TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    employee_id INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS certificates (
+    id SERIAL PRIMARY KEY,
+    series TEXT, number TEXT, husband TEXT, husband_birth TEXT,
+    husband_surname_after TEXT, wife TEXT, wife_birth TEXT,
+    wife_surname_after TEXT, marriage_date TEXT, act_number TEXT,
+    issue_date TEXT, place TEXT, registrar TEXT, created_by INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+INSERT INTO employees (full_name, role, login, password, is_admin)
+VALUES ('Воронцова Мария Игоревна', 'Руководитель отдела', 'admin', 'admin123', TRUE)
+ON CONFLICT (login) DO NOTHING;
+"""
+
 
 def db():
     return psycopg2.connect(os.environ['DATABASE_URL'])
+
+
+def ensure_schema(conn):
+    cur = conn.cursor()
+    cur.execute(SETUP_SQL)
+    conn.commit()
+    cur.close()
 
 
 def resp(status, body):
@@ -49,6 +84,8 @@ def handler(event: dict, context) -> dict:
 
     conn = db()
     try:
+        ensure_schema(conn)
+
         if method == 'POST':
             body = json.loads(event.get('body') or '{}')
             login = (body.get('login') or '').strip()
